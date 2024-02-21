@@ -1,42 +1,39 @@
 import json
 import boto3
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+import sys
+from dotenv import load_dotenv
+import os
 
-def lambda_handler(event, context):
+
+def lambda_handler():
     
     standard = 0
     io = 0 
 
     # Pricing client (not account specific)
-    pricing_client = boto3.client('pricing')
+    pricing_client = boto3.client('pricing', region_name="us-east-1")
 
-    # RDS client (account specific)
-    rolearn = "arn:aws:iam::" + event['account_id'] + ":role/readonly"
-    sts = boto3.client('sts')    
-    sts = sts.assume_role(
-        RoleArn=rolearn,
-        RoleSessionName="readonly_lambda"
-    )
-
-    ACCESS_KEY = sts['Credentials']['AccessKeyId']
-    SECRET_KEY = sts['Credentials']['SecretAccessKey']
-    SESSION_TOKEN = sts['Credentials']['SessionToken']  
+    # get the credentials from user input
+    load_dotenv()
+    ACCESS_KEY = os.getenv('ACCESS_KEY')
+    SECRET_KEY = os.getenv('SECRET_KEY')
+    AURORA_REGION = "sa-east-1"
+    AURORA_CLUSTER = os.getenv("CLUSTER")
 
     rds_client = boto3.client(
         'rds', 
         aws_access_key_id = ACCESS_KEY,
         aws_secret_access_key = SECRET_KEY,
-        aws_session_token = SESSION_TOKEN,        
-        region_name = event['region']
+        region_name = AURORA_REGION
     )
     
-    # Cloudawtch client (account specific)
+    # Cloudwatch client (account specific)
     cloudwatch_client = boto3.client(
         'cloudwatch', 
         aws_access_key_id = ACCESS_KEY,
-        aws_secret_access_key = SECRET_KEY,
-        aws_session_token = SESSION_TOKEN,        
-        region_name = event['region']
+        aws_secret_access_key = SECRET_KEY,       
+        region_name = AURORA_REGION
     )    
     
     # First, let's figure out the per-instance hourly cost
@@ -47,7 +44,7 @@ def lambda_handler(event, context):
             {
                 'Name': 'db-cluster-id',
                 'Values': [
-                    event['cluster']
+                    AURORA_CLUSTER
                 ]
             },
         ],        
@@ -64,7 +61,7 @@ def lambda_handler(event, context):
             {
                 'Type': 'TERM_MATCH',
                 'Field': 'regionCode',
-                'Value': event['region']
+                'Value': AURORA_REGION
             },
             {
                 'Type': 'TERM_MATCH',
@@ -98,7 +95,7 @@ def lambda_handler(event, context):
             {
                 'Type': 'TERM_MATCH',
                 'Field': 'regionCode',
-                'Value': event['region']
+                'Value': AURORA_REGION
             },
             {
                 'Type': 'TERM_MATCH',
@@ -132,7 +129,7 @@ def lambda_handler(event, context):
         Dimensions=[
             {
                 'Name': 'DBClusterIdentifier',
-                'Value': event['cluster']
+                'Value': AURORA_CLUSTER
             }
         ],
         MetricName='VolumeBytesUsed',
@@ -157,7 +154,7 @@ def lambda_handler(event, context):
         {
             'Type': 'TERM_MATCH',
             'Field': 'regionCode',
-            'Value': event['region']
+            'Value': AURORA_REGION
         },    
         {
             'Type': 'TERM_MATCH',
@@ -187,7 +184,7 @@ def lambda_handler(event, context):
         {
             'Type': 'TERM_MATCH',
             'Field': 'regionCode',
-            'Value': event['region']
+            'Value': AURORA_REGION
         },    
         {
             'Type': 'TERM_MATCH',
@@ -220,7 +217,7 @@ def lambda_handler(event, context):
         Dimensions=[
             {
                 'Name': 'DBClusterIdentifier',
-                'Value': event['cluster']
+                'Value': AURORA_CLUSTER
             }
         ],
         MetricName='VolumeReadIOPs',
@@ -240,7 +237,7 @@ def lambda_handler(event, context):
         Dimensions=[
             {
                 'Name': 'DBClusterIdentifier',
-                'Value': event['cluster']
+                'Value': AURORA_CLUSTER
             }
         ],
         MetricName='VolumeWriteIOPs',
@@ -265,7 +262,7 @@ def lambda_handler(event, context):
         {
             'Type': 'TERM_MATCH',
             'Field': 'regionCode',
-            'Value': event['region']
+            'Value': AURORA_REGION
         }, 
         {
             'Type': 'TERM_MATCH',
@@ -288,4 +285,7 @@ def lambda_handler(event, context):
     standard += cost 
 
     analysis = {'standard':standard,'io':io}
-    return analysis
+    print(analysis)
+
+if __name__ == "__main__":
+    lambda_handler()
